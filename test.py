@@ -2,17 +2,30 @@ from openpyxl import load_workbook
 from openpyxl.styles import Border, Side
 import win32com.client
 import time
+from create_sc_form import create_sc_form
+import os
 
-FILE_NAME = 'Sinkat Contact Info.xlsx'
-CURR_SUB_SHEET = 'Current Subcontractors'
-PREV_SUB_SHEET = 'Previous Subcontractors'
+#Get Important Files and respective paths
+PATH = os.path.dirname(os.path.realpath(__file__))
+FILE_NAME = 'Dummy Contact Info.xlsx'
+PATH_TO_XLSX = (PATH + '\\' + FILE_NAME)
+
 #xml column width, column widths are reduced by this error when saved
 COLUMN_ERROR = 0.7109375
-HEADER_ROWS = 2
-DIRPATH = r'C:\Users\Daniel\Documents\GitHub\Sinkat\\'
 
+#In each sheet, we have 2 header rows with tabel labels
+HEADER_ROWS = 2
+#Used columns and respective widths per sheet
+#Can guess this by respective string name and letter count, but used conservative values form trial and error
 USED_COLUMNS  = ['A','B','C','D','E','F','G']
 COLUMN_WIDTHS = [ 45, 12, 22, 14, 13, 27, 14]
+
+def ensure_wb_closed():
+    excel = win32com.client.Dispatch('Excel.Application')
+    excel.Visible = True
+    wb = excel.Workbooks.Open(PATH_TO_XLSX)
+    wb.Save()
+    excel.Application.Quit()
 
 def get_name():
     while(True):
@@ -29,7 +42,6 @@ def get_sin():
         sin = ''
         sin = input("Enter SIN: ")   
         sin = sin.replace(' ', '')
-
         if (sin == '0'):
             print("No SIN Entry")
             break
@@ -46,7 +58,6 @@ def get_sin():
 
 def get_address():
     while(True):
-        
         address = input('Enter Address: ')
         if(address == '0'):
             print('No address Entry')
@@ -89,7 +100,7 @@ def get_phone_number():
     while(True):
         phone_number = input('Enter Phone Number: ')
         phone_number = phone_number.replace(' ', '')
-        print('Phone Number is: ' + phone_number)
+
         if(phone_number == '0'):
             print('No Phone Number Entry')
             break
@@ -115,13 +126,13 @@ def hire_new_sc(ws):
     new_row = ws.max_row+1
     #Assign
     while(True):
-        ws['A' + str(new_row)].value = get_name()
-        ws['B' + str(new_row)].value = get_sin()
-        ws['C' + str(new_row)].value = get_address()
-        ws['D' + str(new_row)].value = get_city_province()
-        ws['E' + str(new_row)].value = get_postal_code()
-        ws['F' + str(new_row)].value = get_email()
-        ws['G' + str(new_row)].value = get_phone_number()
+        name          = ws['A' + str(new_row)].value = get_name()
+        sin           = ws['B' + str(new_row)].value = get_sin()
+        address       = ws['C' + str(new_row)].value = get_address()
+        city_province = ws['D' + str(new_row)].value = get_city_province()
+        postal_code   = ws['E' + str(new_row)].value = get_postal_code()
+        email         = ws['F' + str(new_row)].value = get_email()
+        phone_number  = ws['G' + str(new_row)].value = get_phone_number()
 
         #print('Name is: ')
         print(' ' + ws['A' + str(new_row)].value)
@@ -140,15 +151,25 @@ def hire_new_sc(ws):
 
         if(input('Is Information this correct? Enter 1 to confirm, any other character to redo: ') == '1'):
             print('Entry Successfully Added.')
+            print('Creating Subcontractor Form: ')
+            create_sc_form(name,sin, address, city_province, postal_code, email, phone_number)
             break
+
+def is_sheet_empty(sheet):
+    return((sheet['A3'].value) == None)
 
 def change_sc_status(og_sh, dest_sh):
     while(True):
 
+        if (is_sheet_empty(og_sh)):
+            print('Empty List! ')
+            return False
+
         print_sc_list (og_sh)
+
         sc_row = input('Enter Corresponding Subcontractor Number (0 to quit): ')
         if(sc_row == '0'):
-            return
+            return False
         else:
             sc_row = int(sc_row)+HEADER_ROWS
             print('Moving: ' + og_sh['A'+ str(sc_row)].value)
@@ -167,7 +188,11 @@ def change_sc_status(og_sh, dest_sh):
             i+=1
 
         print('Successfully moved ' + name)
-        return
+        print()
+        print('UPDATED SHEETS:')
+        print_sc_list(og_sh)
+        print_sc_list(dest_sh)
+        return True
             
 def format_widths(ws):
     i = 0
@@ -213,14 +238,12 @@ def format_borders(ws):
             elif(i==ws.max_row):
                 ws[x + str(i)].border = bottom_and_side_border
     
-
-
-def sort(sheet_name):
+def sort_sheet_data(sheet_name):
     #win32com to change
     excel = win32com.client.Dispatch('Excel.Application')
     excel.Visible = True
 
-    wb = excel.Workbooks.Open(DIRPATH + FILE_NAME)
+    wb = excel.Workbooks.Open(PATH_TO_XLSX)
 
     ws = wb.Worksheets(sheet_name)
     top_left_cell  = 'A' + str(HEADER_ROWS+1)
@@ -230,14 +253,20 @@ def sort(sheet_name):
     excel.Application.Quit()
 
 def main():
-    
+
+    #Make Sure Workbook is closed before altering
+    ensure_wb_closed()
+
     #Workbook
-    wb = load_workbook(FILE_NAME)
-    #Load Sheet
-    curr_sh = wb[CURR_SUB_SHEET]
-    prev_sh = wb[PREV_SUB_SHEET]
+    wb = load_workbook(PATH_TO_XLSX)
 
+    #Load Sheet, get names of sheets
+    curr_sh = wb.worksheets[0]
+    prev_sh = wb.worksheets[1]
+    name_curr_sc_sh = (curr_sh.title)
+    name_prev_sc_sh = (prev_sh.title)
 
+    #Continous Loop to gather input
     while (True):
         print('Enter 1 to Add New Subcontractor: ')
         print('Enter 2 to change Subcontractor Employment status: ')
@@ -247,22 +276,21 @@ def main():
         match status:
             case '1':
                 hire_new_sc(curr_sh)
+                print('Sucessfully Added')
 
             case '2': 
                 hire = input('Enter 1 to fire and 2 to rehire (any other key to quit): ')
                 if(hire == '1'):
-                    change_sc_status(curr_sh, prev_sh)
-                    print('UPDATED LIST: ')
-                    print_sc_list(curr_sh)
-                    print_sc_list(prev_sh)
+                    if(change_sc_status(curr_sh, prev_sh) == True):
+                        print('Successfully Laid off')
+                    else:
+                        print('Nothing Done')
 
                 elif(hire == '2'):
-                    change_sc_status(prev_sh, curr_sh)
-                    print('UPDATED LIST: ')
-                    print_sc_list(prev_sh)
-                    print_sc_list(curr_sh)                   
-                
-                    
+                    if(change_sc_status(prev_sh, curr_sh) == True):
+                        print('Successfully Rehired')
+                    else:
+                        print('Nothing Done')              
                 
             case '0':
                 print()
@@ -276,18 +304,18 @@ def main():
 
     format_borders(curr_sh)
     format_borders(prev_sh)
-
-    wb.save(FILE_NAME)
+   
+    wb.save(PATH_TO_XLSX)
     wb.close()
 
     print ('Reformatting Sheets....')
     
     #Sort Data On Excel
-    sort(CURR_SUB_SHEET)
-    sort(PREV_SUB_SHEET)
+    sort_sheet_data(name_curr_sc_sh)
+    sort_sheet_data(name_prev_sc_sh)
     print ('Reformatting Complete')
-    print ('Exiting Program')
-    time.sleep(2)
+    print ('Sucessfully Exited Program')
+    input('Press any key to close window....')
 
 if __name__== "__main__" :
     main()
